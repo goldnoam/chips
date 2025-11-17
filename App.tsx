@@ -107,7 +107,12 @@ const InstructionsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
        <h3 className="font-bold text-lg mt-4 mb-2">Instruction</h3>
        <p>Use up arrow to rotate chip item</p>
       <h3 className="font-bold text-lg mt-4 mb-2">Scoring</h3>
-      <p>You get more points for clearing multiple lines at once. Keep playing to beat your high score!</p>
+        <ul className="list-disc list-inside space-y-2">
+            <li><strong>Base Score:</strong> 100 points per line.</li>
+            <li><strong>Multi-line Bonus:</strong> Clearing multiple lines at once gives a huge score multiplier!</li>
+            <li><strong>Burger Combo:</strong> Clearing a line with 🍔🍔🍔 gives a <strong>150 point bonus</strong>.</li>
+            <li><strong>Item Combo:</strong> Clearing a line with 3 other identical items gives a <strong>50 point bonus</strong>.</li>
+        </ul>
       <button onClick={onClose} className="absolute top-2 right-2 text-2xl font-bold hover:text-fries transition-colors" aria-label="Close instructions">&times;</button>
       <button onClick={onClose} className="mt-6 w-full px-4 py-3 bg-yellow-500 text-slate-900 font-bold rounded-lg hover:bg-yellow-600 transition-transform transform hover:scale-105">Got it!</button>
     </div>
@@ -231,37 +236,60 @@ const App: React.FC = () => {
   const clearLines = useCallback(() => {
     let newBoard = board.map(row => [...row]);
     const rowsToClear = new Set<number>();
+    const clearedRowsData = new Map<number, { type: 'fry' } | { type: 'combo', item: CellType }>();
 
-    // Check for full fry rows & 3-in-a-row of same item
     for (let y = 0; y < BOARD_HEIGHT; y++) {
-      if (newBoard[y].every(cell => cell === CellType.FRY)) {
-        rowsToClear.add(y);
-        continue; // Move to next row
-      }
-      for (let x = 0; x <= BOARD_WIDTH - 3; x++) {
-        const cell1 = newBoard[y][x];
-        if (cell1 > CellType.FRY) { // Check if it's a special item
-          const cell2 = newBoard[y][x + 1];
-          const cell3 = newBoard[y][x + 2];
-          if (cell1 === cell2 && cell1 === cell3) {
-            rowsToClear.add(y);
-            break; // Found a match, move to next row
-          }
+        // Check for full fry row first
+        if (newBoard[y].every(cell => cell === CellType.FRY)) {
+            if (!rowsToClear.has(y)) {
+                rowsToClear.add(y);
+                clearedRowsData.set(y, { type: 'fry' });
+            }
+            continue; // Move to the next row
         }
-      }
+
+        // Check for 3-in-a-row of the same item
+        for (let x = 0; x <= BOARD_WIDTH - 3; x++) {
+            const cell1 = newBoard[y][x];
+            if (cell1 > CellType.FRY) { // It's a special item
+                const cell2 = newBoard[y][x + 1];
+                const cell3 = newBoard[y][x + 2];
+                if (cell1 === cell2 && cell1 === cell3) {
+                    if (!rowsToClear.has(y)) {
+                        rowsToClear.add(y);
+                        clearedRowsData.set(y, { type: 'combo', item: cell1 });
+                    }
+                    break; // Found a match, this row is marked for clearing, move to the next row
+                }
+            }
+        }
     }
 
     if (rowsToClear.size > 0) {
-      const linesClearedCount = rowsToClear.size;
-      newBoard = newBoard.filter((_, y) => !rowsToClear.has(y));
-      const emptyRows = Array.from({ length: linesClearedCount }, () => Array(BOARD_WIDTH).fill(CellType.EMPTY));
-      newBoard.unshift(...emptyRows);
-      
-      setBoard(newBoard);
-      setScore(prev => prev + 100 * linesClearedCount * linesClearedCount);
-      playSound('clear');
+        const linesClearedCount = rowsToClear.size;
+        let scoreToAdd = 100 * linesClearedCount * linesClearedCount; // Base score
+
+        // Add bonus points for item combos
+        clearedRowsData.forEach((data) => {
+            if (data.type === 'combo') {
+                if (data.item === CellType.BURGER) {
+                    scoreToAdd += 150; // Burger combo bonus
+                } else {
+                    scoreToAdd += 50; // Other item combo bonus
+                }
+            }
+        });
+
+        // Remove cleared lines from the board
+        newBoard = newBoard.filter((_, y) => !rowsToClear.has(y));
+        const emptyRows = Array.from({ length: linesClearedCount }, () => Array(BOARD_WIDTH).fill(CellType.EMPTY));
+        newBoard.unshift(...emptyRows);
+        
+        setBoard(newBoard);
+        setScore(prev => prev + scoreToAdd);
+        playSound('clear');
     }
-  }, [board, playSound]);
+}, [board, playSound]);
 
   const lockPiece = useCallback(() => {
     if (!currentPiece) return;
