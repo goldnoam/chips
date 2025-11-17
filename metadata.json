@@ -1,0 +1,5 @@
+{
+  "name": "Fries Tetris",
+  "description": "A Tetris-style game where you stack french fries and burgers to clear lines. Clear full lines of fries or lines with at least three burgers. Level up every 20 seconds for a faster, more challenging game. Features dark and light themes and a high score tracker.",
+  "requestFramePermissions": []
+}
