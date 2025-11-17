@@ -307,30 +307,13 @@ const App: React.FC = () => {
     setCurrentPiece(newPiece);
   }, [currentPiece, board, checkCollision]);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (!isPlaying || isGameOver || isPaused) return;
-    switch (e.key) {
-      case 'ArrowLeft':
-        playerMove(-1);
-        break;
-      case 'ArrowRight':
-        playerMove(1);
-        break;
-      case 'ArrowDown':
-        drop();
-        break;
-      case 'ArrowUp':
-        playerRotate();
-        break;
-      case ' ':
-        hardDrop();
-        break;
-      case 'p':
-      case 'P':
-        setIsPaused(p => !p);
-        break;
-    }
-  }, [isPlaying, isGameOver, isPaused, playerMove, drop, playerRotate, hardDrop]);
+  const gameLogicRef = useRef({ isPlaying, isGameOver, isPaused, playerMove, drop, playerRotate, hardDrop, setIsPaused });
+  const moveIntervalRef = useRef<number | null>(null);
+  const downIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    gameLogicRef.current = { isPlaying, isGameOver, isPaused, playerMove, drop, playerRotate, hardDrop, setIsPaused };
+  }, [isPlaying, isGameOver, isPaused, playerMove, drop, playerRotate, hardDrop, setIsPaused]);
   
   useEffect(() => {
     if (currentPiece && checkCollision(currentPiece, board)) {
@@ -377,12 +360,71 @@ const App: React.FC = () => {
     }, 1000);
     return () => clearInterval(timer);
   }, [isPlaying, isGameOver, isPaused]);
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
   
+  // Keyboard input handler for continuous movement
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const { isPlaying, isGameOver, isPaused, playerMove, drop, playerRotate, hardDrop, setIsPaused } = gameLogicRef.current;
+      if (!isPlaying || isGameOver || isPaused || e.repeat) return;
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          playerMove(-1);
+          if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+          moveIntervalRef.current = window.setInterval(() => gameLogicRef.current.playerMove(-1), 100);
+          break;
+        case 'ArrowRight':
+          playerMove(1);
+          if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+          moveIntervalRef.current = window.setInterval(() => gameLogicRef.current.playerMove(1), 100);
+          break;
+        case 'ArrowDown':
+          drop();
+          if (downIntervalRef.current) clearInterval(downIntervalRef.current);
+          downIntervalRef.current = window.setInterval(() => gameLogicRef.current.drop(), 50);
+          break;
+        case 'ArrowUp':
+          playerRotate();
+          break;
+        case ' ':
+          hardDrop();
+          break;
+        case 'p':
+        case 'P':
+          setIsPaused(p => !p);
+          break;
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'ArrowLeft':
+        case 'ArrowRight':
+          if (moveIntervalRef.current) {
+            clearInterval(moveIntervalRef.current);
+            moveIntervalRef.current = null;
+          }
+          break;
+        case 'ArrowDown':
+          if (downIntervalRef.current) {
+            clearInterval(downIntervalRef.current);
+            downIntervalRef.current = null;
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+      if (downIntervalRef.current) clearInterval(downIntervalRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove(theme === 'dark' ? 'light' : 'dark');
@@ -436,10 +478,10 @@ const App: React.FC = () => {
                 </button>
             </div>
         )}
-        <div className="w-full max-w-[250px] sm:max-w-[300px] md:max-w-none md:w-auto">
+        <div className="w-full max-w-xs sm:max-w-sm md:w-[320px]">
              <GameBoard board={board} currentPiece={currentPiece} />
         </div>
-        <div className="flex flex-col gap-4 text-center w-full max-w-[250px] sm:max-w-[300px] md:w-48">
+        <div className="flex flex-col gap-4 text-center w-full max-w-xs sm:max-w-sm md:w-64">
           <div className="bg-slate-200 dark:bg-slate-800 p-4 rounded-lg shadow-md">
             <h2 className="font-bold text-lg mb-1">SCORE</h2>
             <p className="text-2xl text-fries">{score}</p>
