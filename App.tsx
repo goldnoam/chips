@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Board, CellType, Piece, Theme } from './types';
-import { BOARD_WIDTH, BOARD_HEIGHT, LEVEL_DURATION, DIFFICULTY_SETTINGS, FRY_PIECES_SHAPES, SINGLE_CELL_PIECES } from './constants';
+import { BOARD_WIDTH, BOARD_HEIGHT, LEVEL_DURATION, DIFFICULTY_SETTINGS, FRY_PIECES_SHAPES, SINGLE_CELL_PIECES, ITEM_PIECES } from './constants';
 
 type Difficulty = keyof typeof DIFFICULTY_SETTINGS;
 
@@ -10,7 +10,7 @@ const createEmptyBoard = (): Board => Array.from({ length: BOARD_HEIGHT }, () =>
 // Helper Components
 const Cell: React.FC<{ type: CellType }> = React.memo(({ type }) => {
   const baseClasses = 'w-full h-full border-[1px]';
-  const itemClasses = 'flex items-center justify-center text-xl sm:text-2xl';
+  const itemClasses = 'flex items-center justify-center text-2xl sm:text-3xl';
   let colorClasses = '';
   let content = null;
 
@@ -29,10 +29,6 @@ const Cell: React.FC<{ type: CellType }> = React.memo(({ type }) => {
     case CellType.KETCHUP:
       content = '🍅';
       colorClasses = `${itemClasses} bg-red-500/50 border-red-700/50 dark:border-red-500/50`;
-      break;
-    case CellType.MUSTARD:
-      content = 'M';
-      colorClasses = `${itemClasses} bg-yellow-400/60 border-yellow-600/50 text-yellow-800 dark:text-yellow-200 font-bold`;
       break;
     case CellType.DONUT:
       content = '🍩';
@@ -174,16 +170,26 @@ const App: React.FC = () => {
   }, [isMuted]);
 
   const createRandomPiece = useCallback((): Piece => {
-    const isFryPiece = Math.random() < 0.6; // 60% chance for fry piece
-    if (isFryPiece) {
+    const pieceTypeRoll = Math.random();
+
+    if (pieceTypeRoll < 0.5) { // 50% Fry pieces
       const shape = FRY_PIECES_SHAPES[Math.floor(Math.random() * FRY_PIECES_SHAPES.length)];
       return {
-        shape, type: CellType.FRY, position: { row: 0, col: Math.floor(BOARD_WIDTH / 2) - Math.floor(shape[0].length / 2) },
+        shape,
+        type: CellType.FRY,
+        position: { row: 0, col: Math.floor(BOARD_WIDTH / 2) - Math.floor(shape[0].length / 2) },
       };
-    } else {
+    } else if (pieceTypeRoll < 0.75 && SINGLE_CELL_PIECES.length > 0) { // 25% Single-cell items
       const pieceData = SINGLE_CELL_PIECES[Math.floor(Math.random() * SINGLE_CELL_PIECES.length)];
       return {
-        ...pieceData, position: { row: 0, col: Math.floor(BOARD_WIDTH / 2) },
+        ...pieceData,
+        position: { row: 0, col: Math.floor(BOARD_WIDTH / 2) },
+      };
+    } else { // 25% Multi-cell items
+      const pieceData = ITEM_PIECES[Math.floor(Math.random() * ITEM_PIECES.length)];
+      return {
+        ...pieceData,
+        position: { row: 0, col: Math.floor(BOARD_WIDTH / 2) - Math.floor(pieceData.shape[0].length / 2) },
       };
     }
   }, []);
@@ -294,9 +300,13 @@ const App: React.FC = () => {
   }, [currentPiece, board, checkCollision]);
 
   const playerRotate = useCallback(() => {
-    if (!currentPiece || currentPiece.type !== CellType.FRY) return;
-    const shape = currentPiece.shape;
-    if (shape.every(row => row.every(cell => cell === CellType.FRY)) && shape.length === shape[0].length) return; // Don't rotate O-shape
+    if (!currentPiece) return;
+    const { shape } = currentPiece;
+
+    const isSingleBlock = shape.length === 1 && shape[0].length === 1;
+    const isSquareBlock = shape.length > 1 && shape.length === shape[0]?.length && shape.every(row => row.every(cell => cell !== CellType.EMPTY));
+
+    if (isSingleBlock || isSquareBlock) return;
 
     const rotatedShape = shape[0].map((_, colIndex) => shape.map(row => row[colIndex]).reverse());
     const newPiece = { ...currentPiece, shape: rotatedShape };
@@ -353,9 +363,19 @@ const App: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const { isPlaying, isGameOver, isPaused, playerMove, drop, playerRotate, hardDrop, setIsPaused } = gameLogicRef.current;
+      
+      // Handle pause/unpause first, as it has different rules
+      if (e.key === 'p' || e.key === 'P') {
+        if (isPlaying && !isGameOver && !e.repeat) setIsPaused(p => !p);
+        return;
+      }
+      if (isPaused) {
+        if (e.key === 'Enter' || e.key === ' ') setIsPaused(false);
+        return;
+      }
+
+      // The rest of the controls only work if playing and not paused
       if (!isPlaying || isGameOver || e.repeat) return;
-      if (e.key === 'p' || e.key === 'P') { setIsPaused(p => !p); return; }
-      if (isPaused) return;
 
       switch (e.key) {
         case 'ArrowLeft': moveDirectionRef.current = -1; playerMove(-1); if (moveIntervalRef.current) clearInterval(moveIntervalRef.current); moveIntervalRef.current = window.setInterval(() => gameLogicRef.current.playerMove(-1), 75); break;
@@ -417,6 +437,7 @@ const App: React.FC = () => {
         {isPaused && (
              <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-10 text-white p-4">
                 <h2 className="text-4xl font-bold text-fries mb-6">Paused</h2>
+                <p className="mb-6">Press 'P', 'Enter', or 'Space' to Resume</p>
                 <button onClick={() => setIsPaused(false)} className="px-8 py-4 bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-bold rounded-lg text-2xl shadow-lg transform hover:scale-105 transition-transform">Resume</button>
             </div>
         )}

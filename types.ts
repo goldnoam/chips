@@ -5,9 +5,8 @@ export enum CellType {
   BURGER = 2,
   POTATO = 3,
   KETCHUP = 4,
-  MUSTARD = 5,
-  DONUT = 6,
-  ONION = 7,
+  DONUT = 5,
+  ONION = 6,
 }
 
 export type Board = CellType[][];

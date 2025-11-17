@@ -57,14 +57,26 @@ const Z_SHAPE: PieceShape = [
   [CellType.EMPTY, CellType.FRY, CellType.FRY],
 ];
 
+const DONUT_O_SHAPE: PieceShape = [
+  [CellType.DONUT, CellType.DONUT],
+  [CellType.DONUT, CellType.DONUT],
+];
+
+const ONION_T_SHAPE: PieceShape = [
+  [CellType.EMPTY, CellType.ONION, CellType.EMPTY],
+  [CellType.ONION, CellType.ONION, CellType.ONION],
+];
+
 export const FRY_PIECES_SHAPES: PieceShape[] = [I_SHAPE, L_SHAPE, J_SHAPE, O_SHAPE, S_SHAPE, T_SHAPE, Z_SHAPE];
+
+export const ITEM_PIECES = [
+  { shape: DONUT_O_SHAPE, type: CellType.DONUT },
+  { shape: ONION_T_SHAPE, type: CellType.ONION },
+] as const;
 
 export const BURGER_PIECE_SHAPE: PieceShape = [[CellType.BURGER]];
 export const POTATO_PIECE_SHAPE: PieceShape = [[CellType.POTATO]];
 export const KETCHUP_PIECE_SHAPE: PieceShape = [[CellType.KETCHUP]];
-export const MUSTARD_PIECE_SHAPE: PieceShape = [[CellType.MUSTARD]];
-export const DONUT_PIECE_SHAPE: PieceShape = [[CellType.DONUT]];
-export const ONION_PIECE_SHAPE: PieceShape = [[CellType.ONION]];
 
 // FIX: Added `as const` to prevent type widening on the `type` property.
 // This ensures that TypeScript infers a specific literal type (e.g., CellType.BURGER)
@@ -74,7 +86,4 @@ export const SINGLE_CELL_PIECES = [
   { shape: BURGER_PIECE_SHAPE, type: CellType.BURGER },
   { shape: POTATO_PIECE_SHAPE, type: CellType.POTATO },
   { shape: KETCHUP_PIECE_SHAPE, type: CellType.KETCHUP },
-  { shape: MUSTARD_PIECE_SHAPE, type: CellType.MUSTARD },
-  { shape: DONUT_PIECE_SHAPE, type: CellType.DONUT },
-  { shape: ONION_PIECE_SHAPE, type: CellType.ONION },
 ] as const;
