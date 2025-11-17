@@ -54,7 +54,7 @@ const GameBoard: React.FC<{ board: Board; currentPiece: Piece | null }> = ({ boa
   );
 };
 
-const NextPiece: React.FC<{ piece: Piece | null }> = ({ piece }) => {
+const NextPiece: React.FC<{ piece: Piece | null }> = React.memo(({ piece }) => {
   const board = Array.from({ length: 4 }, () => Array(4).fill(CellType.EMPTY));
   if (piece) {
     const shape = piece.shape;
@@ -73,7 +73,7 @@ const NextPiece: React.FC<{ piece: Piece | null }> = ({ piece }) => {
       {board.map((row, y) => row.map((cell, x) => <Cell key={`${y}-${x}`} type={cell} />))}
     </div>
   );
-};
+});
 
 
 const App: React.FC = () => {
@@ -310,6 +310,7 @@ const App: React.FC = () => {
   const gameLogicRef = useRef({ isPlaying, isGameOver, isPaused, playerMove, drop, playerRotate, hardDrop, setIsPaused });
   const moveIntervalRef = useRef<number | null>(null);
   const downIntervalRef = useRef<number | null>(null);
+  const moveDirectionRef = useRef<number>(0); // -1 for left, 1 for right
 
   useEffect(() => {
     gameLogicRef.current = { isPlaying, isGameOver, isPaused, playerMove, drop, playerRotate, hardDrop, setIsPaused };
@@ -360,8 +361,7 @@ const App: React.FC = () => {
     }, 1000);
     return () => clearInterval(timer);
   }, [isPlaying, isGameOver, isPaused]);
-  
-  // Keyboard input handler for continuous movement
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const { isPlaying, isGameOver, isPaused, playerMove, drop, playerRotate, hardDrop, setIsPaused } = gameLogicRef.current;
@@ -369,14 +369,16 @@ const App: React.FC = () => {
 
       switch (e.key) {
         case 'ArrowLeft':
+          moveDirectionRef.current = -1;
           playerMove(-1);
           if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
-          moveIntervalRef.current = window.setInterval(() => gameLogicRef.current.playerMove(-1), 100);
+          moveIntervalRef.current = window.setInterval(() => gameLogicRef.current.playerMove(-1), 75);
           break;
         case 'ArrowRight':
+          moveDirectionRef.current = 1;
           playerMove(1);
           if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
-          moveIntervalRef.current = window.setInterval(() => gameLogicRef.current.playerMove(1), 100);
+          moveIntervalRef.current = window.setInterval(() => gameLogicRef.current.playerMove(1), 75);
           break;
         case 'ArrowDown':
           drop();
@@ -399,10 +401,17 @@ const App: React.FC = () => {
     const handleKeyUp = (e: KeyboardEvent) => {
       switch (e.key) {
         case 'ArrowLeft':
-        case 'ArrowRight':
-          if (moveIntervalRef.current) {
-            clearInterval(moveIntervalRef.current);
+          if (moveDirectionRef.current === -1) {
+            if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
             moveIntervalRef.current = null;
+            moveDirectionRef.current = 0;
+          }
+          break;
+        case 'ArrowRight':
+          if (moveDirectionRef.current === 1) {
+            if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+            moveIntervalRef.current = null;
+            moveDirectionRef.current = 0;
           }
           break;
         case 'ArrowDown':
@@ -478,10 +487,10 @@ const App: React.FC = () => {
                 </button>
             </div>
         )}
-        <div className="w-full max-w-xs sm:max-w-sm md:w-[320px]">
+        <div className="w-full max-w-sm md:w-96">
              <GameBoard board={board} currentPiece={currentPiece} />
         </div>
-        <div className="flex flex-col gap-4 text-center w-full max-w-xs sm:max-w-sm md:w-64">
+        <div className="flex flex-col gap-4 text-center w-full max-w-sm md:w-80">
           <div className="bg-slate-200 dark:bg-slate-800 p-4 rounded-lg shadow-md">
             <h2 className="font-bold text-lg mb-1">SCORE</h2>
             <p className="text-2xl text-fries">{score}</p>
