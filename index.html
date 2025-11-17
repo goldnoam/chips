@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -24,6 +23,20 @@
             fontFamily: {
               sans: ['"Balsamiq Sans"', 'cursive'],
             },
+            animation: {
+              'piece-pulse': 'piece-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'particle-burst': 'particle-burst 0.8s ease-out forwards',
+            },
+            keyframes: {
+              'piece-pulse': {
+                '0%, 100%': { transform: 'scale(1)', opacity: '1' },
+                '50%': { transform: 'scale(1.03)', opacity: '.95' },
+              },
+              'particle-burst': {
+                '0%': { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
+                '100%': { transform: 'translate(calc(-50% + var(--vx)), calc(-50% + var(--vy))) scale(0)', opacity: 0 },
+              }
+            }
           },
         },
       }

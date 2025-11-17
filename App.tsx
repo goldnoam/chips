@@ -7,6 +7,33 @@ type Difficulty = keyof typeof DIFFICULTY_SETTINGS;
 
 const createEmptyBoard = (): Board => Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(CellType.EMPTY));
 
+// Particle Effect Types & Components
+const PARTICLE_COLORS = ['#FFC72C', '#FFA500', '#FFD700', '#FFFFFF'];
+interface ParticleState {
+  id: number;
+  x: number;
+  y: number;
+  color: string;
+  vx: number;
+  vy: number;
+}
+const Particle: React.FC<{ particle: ParticleState }> = ({ particle }) => {
+  const style = {
+    top: `${particle.y}%`,
+    left: `${particle.x}%`,
+    '--vx': `${particle.vx}px`,
+    '--vy': `${particle.vy}px`,
+    background: particle.color,
+  } as React.CSSProperties;
+
+  return <div className="absolute w-1.5 h-1.5 rounded-full animate-particle-burst" style={style}></div>;
+};
+const ParticleEffects: React.FC<{ particles: ParticleState[] }> = React.memo(({ particles }) => (
+  <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden rounded-lg">
+    {particles.map(p => <Particle key={p.id} particle={p} />)}
+  </div>
+));
+
 // Helper Components
 const useIsMobile = (breakpoint = 768): boolean => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < breakpoint);
@@ -22,9 +49,10 @@ const useIsMobile = (breakpoint = 768): boolean => {
   return isMobile;
 };
 
-const Cell: React.FC<{ type: CellType }> = React.memo(({ type }) => {
+const Cell: React.FC<{ type: CellType, isCurrentPieceCell?: boolean }> = React.memo(({ type, isCurrentPieceCell = false }) => {
   const baseClasses = 'w-full h-full border-[1px]';
-  const itemClasses = 'flex items-center justify-center text-2xl sm:text-3xl';
+  const itemClasses = 'flex items-center justify-center text-2xl sm:text-3xl leading-none';
+  const animationClass = isCurrentPieceCell ? 'animate-piece-pulse' : '';
   let colorClasses = '';
   let content = null;
 
@@ -57,31 +85,13 @@ const Cell: React.FC<{ type: CellType }> = React.memo(({ type }) => {
       break;
   }
 
-  return <div className={`${baseClasses} ${colorClasses}`}>{content}</div>;
+  return <div className={`${baseClasses} ${colorClasses} ${animationClass}`}>{content}</div>;
 });
 
-const GameBoard: React.FC<{ board: Board; currentPiece: Piece | null }> = ({ board, currentPiece }) => {
-  const displayBoard = useMemo(() => {
-    const newBoard = board.map(row => [...row]);
-    if (currentPiece) {
-      currentPiece.shape.forEach((row, y) => {
-        row.forEach((cell, x) => {
-          if (cell !== CellType.EMPTY) {
-            const boardY = currentPiece.position.row + y;
-            const boardX = currentPiece.position.col + x;
-            if (boardY >= 0 && boardY < BOARD_HEIGHT && boardX >= 0 && boardX < BOARD_WIDTH) {
-              newBoard[boardY][boardX] = cell;
-            }
-          }
-        });
-      });
-    }
-    return newBoard;
-  }, [board, currentPiece]);
-
+const GameBoard: React.FC<{ displayBoard: { type: CellType; isCurrent: boolean }[][] }> = ({ displayBoard }) => {
   return (
     <div className="grid grid-cols-10 grid-rows-20 gap-px p-1 bg-slate-300 dark:bg-slate-700 shadow-lg border-4 border-slate-400 dark:border-slate-800 rounded-lg aspect-[1/2]">
-      {displayBoard.map((row, y) => row.map((cell, x) => <Cell key={`${y}-${x}`} type={cell} />))}
+      {displayBoard.map((row, y) => row.map((cell, x) => <Cell key={`${y}-${x}`} type={cell.type} isCurrentPieceCell={cell.isCurrent} />))}
     </div>
   );
 };
@@ -283,8 +293,10 @@ const App: React.FC = () => {
   const [showInstructions, setShowInstructions] = useState(false);
   const [comboCount, setComboCount] = useState(1);
   const [comboMessage, setComboMessage] = useState('');
+  const [particles, setParticles] = useState<ParticleState[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const comboTimeoutRef = useRef<number | null>(null);
+  const particleIdCounter = useRef(0);
   const isMobile = useIsMobile();
 
   const dropInterval = useMemo(() => {
@@ -297,6 +309,24 @@ const App: React.FC = () => {
     const elapsedTime = totalTime - time;
     return Math.min(100, Math.max(0, (elapsedTime / totalTime) * 100));
   }, [time]);
+  
+  const displayBoard = useMemo(() => {
+    const newBoard: { type: CellType, isCurrent: boolean }[][] = board.map(row => row.map(cell => ({ type: cell, isCurrent: false })));
+    if (currentPiece) {
+        currentPiece.shape.forEach((row, y) => {
+            row.forEach((cell, x) => {
+                if (cell !== CellType.EMPTY) {
+                    const boardY = currentPiece.position.row + y;
+                    const boardX = currentPiece.position.col + x;
+                    if (boardY >= 0 && boardY < BOARD_HEIGHT && boardX >= 0 && boardX < BOARD_WIDTH) {
+                        newBoard[boardY][boardX] = { type: cell, isCurrent: true };
+                    }
+                }
+            });
+        });
+    }
+    return newBoard;
+  }, [board, currentPiece]);
 
   const playSound = useCallback((type: 'rotate' | 'drop' | 'clear' | 'gameOver') => {
     if (!audioContextRef.current || isMuted) return;
@@ -376,12 +406,12 @@ const App: React.FC = () => {
     setIsPaused(false);
     setIsPlaying(true);
     setShowInstructions(false);
+    setParticles([]);
   }, [createRandomPiece]);
 
   const lockPiece = useCallback(() => {
     if (!currentPiece) return;
 
-    // Create a new board with the current piece locked in
     const newBoard = board.map(r => [...r]);
     currentPiece.shape.forEach((row, y) => {
         row.forEach((cell, x) => {
@@ -395,28 +425,19 @@ const App: React.FC = () => {
         });
     });
 
-    // Check for lines to clear from this new board
     const rowsToClear = new Set<number>();
     const clearedRowsData = new Map<number, { type: 'fry' } | { type: 'combo', item: CellType }>();
 
     for (let y = 0; y < BOARD_HEIGHT; y++) {
         if (newBoard[y].every(cell => cell === CellType.FRY)) {
-            if (!rowsToClear.has(y)) {
-                rowsToClear.add(y);
-                clearedRowsData.set(y, { type: 'fry' });
-            }
+            if (!rowsToClear.has(y)) { rowsToClear.add(y); clearedRowsData.set(y, { type: 'fry' }); }
             continue;
         }
         for (let x = 0; x <= BOARD_WIDTH - 3; x++) {
             const cell1 = newBoard[y][x];
             if (cell1 > CellType.FRY) {
-                const cell2 = newBoard[y][x + 1];
-                const cell3 = newBoard[y][x + 2];
-                if (cell1 === cell2 && cell1 === cell3) {
-                    if (!rowsToClear.has(y)) {
-                        rowsToClear.add(y);
-                        clearedRowsData.set(y, { type: 'combo', item: cell1 });
-                    }
+                if (cell1 === newBoard[y][x + 1] && cell1 === newBoard[y][x + 2]) {
+                    if (!rowsToClear.has(y)) { rowsToClear.add(y); clearedRowsData.set(y, { type: 'combo', item: cell1 }); }
                     break;
                 }
             }
@@ -429,9 +450,7 @@ const App: React.FC = () => {
         let baseScore = 100 * linesClearedCount * linesClearedCount;
         let itemBonus = 0;
         clearedRowsData.forEach((data) => {
-            if (data.type === 'combo') {
-                itemBonus += (data.item === CellType.BURGER) ? 150 : 50;
-            }
+            if (data.type === 'combo') itemBonus += (data.item === CellType.BURGER) ? 150 : 50;
         });
 
         const totalScoreForTurn = (baseScore + itemBonus) * comboCount;
@@ -444,6 +463,29 @@ const App: React.FC = () => {
         }
         setComboCount(prev => prev + 1);
 
+        const newParticles: ParticleState[] = [];
+        rowsToClear.forEach(y => {
+            for (let x = 0; x < BOARD_WIDTH; x++) {
+                for (let i = 0; i < 8; i++) {
+                    newParticles.push({
+                        id: particleIdCounter.current++,
+                        x: (x + 0.5) / BOARD_WIDTH * 100,
+                        y: (y + 0.5) / BOARD_HEIGHT * 100,
+                        color: PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
+                        vx: (Math.random() - 0.5) * 70,
+                        vy: (Math.random() - 0.5) * 70,
+                    });
+                }
+            }
+        });
+        
+        if (newParticles.length > 0) {
+            setParticles(prev => [...prev, ...newParticles]);
+            setTimeout(() => {
+                setParticles(prev => prev.filter(p => !newParticles.some(np => np.id === p.id)));
+            }, 800);
+        }
+        
         const finalBoard = newBoard.filter((_, y) => !rowsToClear.has(y));
         const emptyRows = Array.from({ length: linesClearedCount }, () => Array(BOARD_WIDTH).fill(CellType.EMPTY));
         finalBoard.unshift(...emptyRows);
@@ -498,7 +540,7 @@ const App: React.FC = () => {
         newPiece.position.col += offset;
         offset = -(offset + (offset > 0 ? 1 : -1));
         if (Math.abs(offset) > newPiece.shape[0].length + 1) {
-            return; // Cannot rotate
+            return;
         }
     }
     setCurrentPiece(newPiece);
@@ -545,7 +587,6 @@ const App: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const { isPlaying, isGameOver, isPaused, playerMove, drop, playerRotate, hardDrop, setIsPaused } = gameLogicRef.current;
       
-      // Handle pause/unpause first, as it has different rules
       if (e.key === 'p' || e.key === 'P') {
         if (isPlaying && !isGameOver && !e.repeat) setIsPaused(p => !p);
         return;
@@ -555,7 +596,6 @@ const App: React.FC = () => {
         return;
       }
 
-      // The rest of the controls only work if playing and not paused
       if (!isPlaying || isGameOver || e.repeat) return;
 
       switch (e.key) {
@@ -626,9 +666,10 @@ const App: React.FC = () => {
         <div className="flex flex-col items-center">
             {isMobile && <MobileInfoBar score={score} highScore={highScore} level={level} nextPiece={nextPiece} />}
             <div className="w-full max-w-xs sm:max-w-sm md:w-96 relative">
-              <GameBoard board={board} currentPiece={currentPiece} />
+              <GameBoard displayBoard={displayBoard} />
+              <ParticleEffects particles={particles} />
               {comboMessage && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
                   <p className="text-5xl font-bold text-fries animate-pulse" style={{ textShadow: '3px 3px 0 #1A202C, -1px -1px 0 #1A202C, 1px -1px 0 #1A202C, -1px 1px 0 #1A202C, 1px 1px 0 #1A202C' }}>
                     {comboMessage}
                   </p>
