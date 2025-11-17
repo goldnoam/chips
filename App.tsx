@@ -10,7 +10,7 @@ const createEmptyBoard = (): Board => Array.from({ length: BOARD_HEIGHT }, () =>
 // Helper Components
 const Cell: React.FC<{ type: CellType }> = React.memo(({ type }) => {
   const baseClasses = 'w-full h-full border-[1px]';
-  const itemClasses = 'flex items-center justify-center text-sm sm:text-base';
+  const itemClasses = 'flex items-center justify-center text-xl sm:text-2xl';
   let colorClasses = '';
   let content = null;
 
@@ -146,7 +146,7 @@ const App: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [isMuted, setIsMuted] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(true);
+  const [showInstructions, setShowInstructions] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const dropInterval = useMemo(() => {
@@ -404,7 +404,7 @@ const App: React.FC = () => {
             {isGameOver ? "Play Again" : "Start Game"}
         </button>
         <button onClick={() => setShowInstructions(true)} className="mt-4 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg shadow-md transform hover:scale-105 transition-transform">
-            How to Play
+            Instructions
         </button>
     </div>
   );
@@ -413,7 +413,7 @@ const App: React.FC = () => {
     <div className="bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text min-h-screen font-sans flex flex-col transition-colors duration-300">
       <main className="flex-grow flex flex-col md:flex-row items-center justify-center p-4 gap-4 md:gap-8 relative">
         {showInstructions && <InstructionsModal onClose={() => setShowInstructions(false)} />}
-        {(!isPlaying || isGameOver) && !showInstructions && renderStartScreen()}
+        {(!isPlaying || isGameOver) && renderStartScreen()}
         {isPaused && (
              <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-10 text-white p-4">
                 <h2 className="text-4xl font-bold text-fries mb-6">Paused</h2>
@@ -440,7 +440,7 @@ const App: React.FC = () => {
            <div className="flex gap-2">
                 <button onClick={toggleTheme} className="w-full p-2 bg-slate-300 dark:bg-slate-700 rounded-lg shadow-md hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors"> {theme === 'dark' ? 'Light' : 'Dark'} </button>
                 <button onClick={toggleMute} className="w-full p-2 bg-slate-300 dark:bg-slate-700 rounded-lg shadow-md hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors"> {isMuted ? 'Unmute' : 'Mute'} </button>
-                <button onClick={() => setShowInstructions(true)} className="w-full p-2 bg-slate-300 dark:bg-slate-700 rounded-lg shadow-md hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors"> Rules </button>
+                <button onClick={() => setShowInstructions(true)} className="w-full p-2 bg-slate-300 dark:bg-slate-700 rounded-lg shadow-md hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors"> Info </button>
            </div>
         </div>
       </main>
