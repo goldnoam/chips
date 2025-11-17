@@ -8,6 +8,20 @@ type Difficulty = keyof typeof DIFFICULTY_SETTINGS;
 const createEmptyBoard = (): Board => Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(CellType.EMPTY));
 
 // Helper Components
+const useIsMobile = (breakpoint = 768): boolean => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < breakpoint);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < breakpoint);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [breakpoint]);
+
+  return isMobile;
+};
+
 const Cell: React.FC<{ type: CellType }> = React.memo(({ type }) => {
   const baseClasses = 'w-full h-full border-[1px]';
   const itemClasses = 'flex items-center justify-center text-2xl sm:text-3xl';
@@ -110,6 +124,7 @@ const InstructionsModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
         <ul className="list-disc list-inside space-y-2">
             <li><strong>Base Score:</strong> 100 points per line.</li>
             <li><strong>Multi-line Bonus:</strong> Clearing multiple lines at once gives a huge score multiplier!</li>
+            <li><strong>Combo Bonus:</strong> Clear lines with consecutive pieces for a COMBO score multiplier!</li>
             <li><strong>Burger Combo:</strong> Clearing a line with 🍔🍔🍔 gives a <strong>150 point bonus</strong>.</li>
             <li><strong>Item Combo:</strong> Clearing a line with 3 other identical items gives a <strong>50 point bonus</strong>.</li>
         </ul>
@@ -133,6 +148,124 @@ const ControlsDisplay = () => (
   </div>
 );
 
+const LevelProgress: React.FC<{ progress: number }> = ({ progress }) => (
+  <div className="w-full bg-slate-300 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden" title={`Progress to next level: ${Math.round(progress)}%`}>
+    <div
+      className="bg-fries h-2.5 rounded-full transition-width duration-1000 ease-linear"
+      style={{ width: `${progress}%` }}
+      role="progressbar"
+      aria-valuenow={progress}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label="Level up progress"
+    ></div>
+  </div>
+);
+
+const DpadButton: React.FC<{ onTouchStart: (e: React.TouchEvent | React.MouseEvent) => void, onTouchEnd: (e: React.TouchEvent | React.MouseEvent) => void, children: React.ReactNode, className?: string, ariaLabel: string }> = ({ onTouchStart, onTouchEnd, children, className = '', ariaLabel }) => (
+  <button
+    onTouchStart={onTouchStart}
+    onTouchEnd={onTouchEnd}
+    onMouseDown={onTouchStart}
+    onMouseUp={onTouchEnd}
+    className={`w-16 h-16 sm:w-20 sm:h-20 bg-slate-500 dark:bg-slate-700 rounded-full flex items-center justify-center text-white active:bg-fries active:text-slate-900 transition-colors select-none shadow-lg ${className}`}
+    aria-label={ariaLabel}
+  >
+    {children}
+  </button>
+);
+
+const DpadControls: React.FC<{ onMove: (dir: number) => void; onRotate: () => void; onDrop: () => void; onHardDrop: () => void; }> = ({ onMove, onRotate, onDrop, onHardDrop }) => {
+  const moveIntervalRef = useRef<number | null>(null);
+  const downIntervalRef = useRef<number | null>(null);
+
+  const handleMoveStart = (e: React.TouchEvent | React.MouseEvent, dir: number) => {
+    e.preventDefault();
+    onMove(dir);
+    if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+    moveIntervalRef.current = window.setInterval(() => onMove(dir), 100);
+  };
+  const handleMoveEnd = (e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    if (moveIntervalRef.current) clearInterval(moveIntervalRef.current);
+    moveIntervalRef.current = null;
+  };
+  const handleDropStart = (e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    onDrop();
+    if (downIntervalRef.current) clearInterval(downIntervalRef.current);
+    downIntervalRef.current = window.setInterval(onDrop, 75);
+  };
+  const handleDropEnd = (e: React.TouchEvent | React.MouseEvent) => {
+    e.preventDefault();
+    if (downIntervalRef.current) clearInterval(downIntervalRef.current);
+    downIntervalRef.current = null;
+  };
+  const handleRotate = (e: React.TouchEvent | React.MouseEvent) => { e.preventDefault(); onRotate(); };
+  const handleHardDrop = (e: React.TouchEvent | React.MouseEvent) => { e.preventDefault(); onHardDrop(); };
+  const handleGenericEnd = (e: React.TouchEvent | React.MouseEvent) => e.preventDefault();
+
+  return (
+    <div className="flex flex-col items-center gap-2 mt-4 md:hidden w-full max-w-xs sm:max-w-sm">
+      <div className="grid grid-cols-3 grid-rows-2 gap-2 w-full max-w-[240px] sm:max-w-[300px]">
+        <div className="col-start-2 row-start-1 flex justify-center">
+          <DpadButton onTouchStart={handleRotate} onTouchEnd={handleGenericEnd} ariaLabel="Rotate">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-8 sm:w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h5m11 2a9 9 0 11-2-7.89" /></svg>
+          </DpadButton>
+        </div>
+        <div className="col-start-1 row-start-2 flex justify-center">
+          <DpadButton onTouchStart={(e) => handleMoveStart(e, -1)} onTouchEnd={handleMoveEnd} ariaLabel="Move Left">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 sm:h-10 sm:w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          </DpadButton>
+        </div>
+        <div className="col-start-2 row-start-2 flex justify-center">
+          <DpadButton onTouchStart={handleDropStart} onTouchEnd={handleDropEnd} ariaLabel="Soft Drop">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 sm:h-10 sm:w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+          </DpadButton>
+        </div>
+        <div className="col-start-3 row-start-2 flex justify-center">
+          <DpadButton onTouchStart={(e) => handleMoveStart(e, 1)} onTouchEnd={handleMoveEnd} ariaLabel="Move Right">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 sm:h-10 sm:w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+          </DpadButton>
+        </div>
+      </div>
+      <button
+        onTouchStart={handleHardDrop} onTouchEnd={handleGenericEnd}
+        onMouseDown={handleHardDrop} onMouseUp={handleGenericEnd}
+        className="w-full max-w-[240px] sm:max-w-[300px] h-14 mt-2 bg-slate-500 dark:bg-slate-700 rounded-lg flex items-center justify-center text-white active:bg-fries active:text-slate-900 transition-colors select-none shadow-lg font-bold tracking-widest"
+        aria-label="Hard Drop"
+      >
+        DROP
+      </button>
+    </div>
+  );
+};
+
+const MobileInfoBar: React.FC<{ score: number; highScore: number; level: number; nextPiece: Piece | null }> = ({ score, highScore, level, nextPiece }) => (
+    <div className="flex flex-col gap-2 w-full max-w-xs sm:max-w-sm p-2 bg-slate-200 dark:bg-slate-800 rounded-lg shadow-md md:hidden mb-2">
+      <div className="flex justify-around">
+          <div className="text-center">
+            <h2 className="font-bold text-xs uppercase tracking-wider">Score</h2>
+            <p className="text-lg font-bold text-fries">{score}</p>
+          </div>
+          <div className="text-center">
+            <h2 className="font-bold text-xs uppercase tracking-wider">High Score</h2>
+            <p className="text-lg font-bold text-fries/80">{highScore}</p>
+          </div>
+      </div>
+      <div className="flex justify-around items-center -my-2">
+          <div className="text-center">
+            <h2 className="font-bold text-xs uppercase tracking-wider">Level</h2>
+            <p className="text-lg font-bold">{level}</p>
+          </div>
+          <div className="text-center">
+            <h2 className="font-bold text-xs uppercase tracking-wider">Next</h2>
+            <div className="w-16 h-16 scale-75"><NextPiece piece={nextPiece} /></div>
+          </div>
+      </div>
+    </div>
+);
+
 const App: React.FC = () => {
   const [theme, setTheme] = useState<Theme>('dark');
   const [board, setBoard] = useState<Board>(createEmptyBoard());
@@ -148,12 +281,22 @@ const App: React.FC = () => {
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [isMuted, setIsMuted] = useState(false);
   const [showInstructions, setShowInstructions] = useState(false);
+  const [comboCount, setComboCount] = useState(1);
+  const [comboMessage, setComboMessage] = useState('');
   const audioContextRef = useRef<AudioContext | null>(null);
+  const comboTimeoutRef = useRef<number | null>(null);
+  const isMobile = useIsMobile();
 
   const dropInterval = useMemo(() => {
     const settings = DIFFICULTY_SETTINGS[difficulty];
     return Math.max(settings.initialInterval - (level - 1) * settings.speedup, 100);
   }, [level, difficulty]);
+
+  const levelProgress = useMemo(() => {
+    const totalTime = LEVEL_DURATION / 1000;
+    const elapsedTime = totalTime - time;
+    return Math.min(100, Math.max(0, (elapsedTime / totalTime) * 100));
+  }, [time]);
 
   const playSound = useCallback((type: 'rotate' | 'drop' | 'clear' | 'gameOver') => {
     if (!audioContextRef.current || isMuted) return;
@@ -226,6 +369,8 @@ const App: React.FC = () => {
     setNextPiece(secondPiece);
     setScore(0);
     setLevel(1);
+    setComboCount(1);
+    setComboMessage('');
     setTime(LEVEL_DURATION / 1000);
     setIsGameOver(false);
     setIsPaused(false);
@@ -233,25 +378,38 @@ const App: React.FC = () => {
     setShowInstructions(false);
   }, [createRandomPiece]);
 
-  const clearLines = useCallback(() => {
-    let newBoard = board.map(row => [...row]);
+  const lockPiece = useCallback(() => {
+    if (!currentPiece) return;
+
+    // Create a new board with the current piece locked in
+    const newBoard = board.map(r => [...r]);
+    currentPiece.shape.forEach((row, y) => {
+        row.forEach((cell, x) => {
+            if (cell !== CellType.EMPTY) {
+                const boardY = currentPiece.position.row + y;
+                const boardX = currentPiece.position.col + x;
+                if (boardY >= 0 && boardY < BOARD_HEIGHT && boardX >= 0 && boardX < BOARD_WIDTH) {
+                    newBoard[boardY][boardX] = cell;
+                }
+            }
+        });
+    });
+
+    // Check for lines to clear from this new board
     const rowsToClear = new Set<number>();
     const clearedRowsData = new Map<number, { type: 'fry' } | { type: 'combo', item: CellType }>();
 
     for (let y = 0; y < BOARD_HEIGHT; y++) {
-        // Check for full fry row first
         if (newBoard[y].every(cell => cell === CellType.FRY)) {
             if (!rowsToClear.has(y)) {
                 rowsToClear.add(y);
                 clearedRowsData.set(y, { type: 'fry' });
             }
-            continue; // Move to the next row
+            continue;
         }
-
-        // Check for 3-in-a-row of the same item
         for (let x = 0; x <= BOARD_WIDTH - 3; x++) {
             const cell1 = newBoard[y][x];
-            if (cell1 > CellType.FRY) { // It's a special item
+            if (cell1 > CellType.FRY) {
                 const cell2 = newBoard[y][x + 1];
                 const cell3 = newBoard[y][x + 2];
                 if (cell1 === cell2 && cell1 === cell3) {
@@ -259,55 +417,51 @@ const App: React.FC = () => {
                         rowsToClear.add(y);
                         clearedRowsData.set(y, { type: 'combo', item: cell1 });
                     }
-                    break; // Found a match, this row is marked for clearing, move to the next row
+                    break;
                 }
             }
         }
     }
-
+    
     if (rowsToClear.size > 0) {
         const linesClearedCount = rowsToClear.size;
-        let scoreToAdd = 100 * linesClearedCount * linesClearedCount; // Base score
-
-        // Add bonus points for item combos
+        
+        let baseScore = 100 * linesClearedCount * linesClearedCount;
+        let itemBonus = 0;
         clearedRowsData.forEach((data) => {
             if (data.type === 'combo') {
-                if (data.item === CellType.BURGER) {
-                    scoreToAdd += 150; // Burger combo bonus
-                } else {
-                    scoreToAdd += 50; // Other item combo bonus
-                }
+                itemBonus += (data.item === CellType.BURGER) ? 150 : 50;
             }
         });
 
-        // Remove cleared lines from the board
-        newBoard = newBoard.filter((_, y) => !rowsToClear.has(y));
-        const emptyRows = Array.from({ length: linesClearedCount }, () => Array(BOARD_WIDTH).fill(CellType.EMPTY));
-        newBoard.unshift(...emptyRows);
-        
-        setBoard(newBoard);
-        setScore(prev => prev + scoreToAdd);
-        playSound('clear');
-    }
-}, [board, playSound]);
+        const totalScoreForTurn = (baseScore + itemBonus) * comboCount;
+        setScore(prev => prev + totalScoreForTurn);
 
-  const lockPiece = useCallback(() => {
-    if (!currentPiece) return;
-    const newBoard = board.map(r => [...r]);
-    currentPiece.shape.forEach((row, y) => {
-      row.forEach((cell, x) => {
-        if (cell !== CellType.EMPTY) {
-          newBoard[currentPiece.position.row + y][currentPiece.position.col + x] = cell;
+        if (comboCount > 1) {
+          if (comboTimeoutRef.current) clearTimeout(comboTimeoutRef.current);
+          setComboMessage(`COMBO x${comboCount}`);
+          comboTimeoutRef.current = window.setTimeout(() => setComboMessage(''), 1500);
         }
-      });
-    });
-    setBoard(newBoard);
-    playSound('drop');
+        setComboCount(prev => prev + 1);
+
+        const finalBoard = newBoard.filter((_, y) => !rowsToClear.has(y));
+        const emptyRows = Array.from({ length: linesClearedCount }, () => Array(BOARD_WIDTH).fill(CellType.EMPTY));
+        finalBoard.unshift(...emptyRows);
+        setBoard(finalBoard);
+
+        playSound('clear');
+    } else {
+        setBoard(newBoard);
+        setComboCount(1);
+        if (comboTimeoutRef.current) clearTimeout(comboTimeoutRef.current);
+        setComboMessage('');
+        playSound('drop');
+    }
     
     setCurrentPiece(nextPiece);
     setNextPiece(createRandomPiece());
 
-  }, [board, currentPiece, nextPiece, createRandomPiece, playSound]);
+  }, [board, currentPiece, nextPiece, createRandomPiece, playSound, comboCount]);
   
   const drop = useCallback(() => {
     if (!isPlaying || isGameOver || !currentPiece || isPaused) return;
@@ -372,8 +526,7 @@ const App: React.FC = () => {
   useEffect(() => { if (currentPiece && checkCollision(currentPiece, board)) { setIsGameOver(true); setIsPlaying(false); playSound('gameOver'); } }, [currentPiece, board, checkCollision, playSound]);
   useEffect(() => { const storedHighScore = localStorage.getItem('friesTetrisHighScore'); if (storedHighScore) { setHighScore(parseInt(storedHighScore, 10)); } }, []);
   useEffect(() => { if (score > highScore) { setHighScore(score); localStorage.setItem('friesTetrisHighScore', score.toString()); } }, [score, highScore]);
-  useEffect(() => { clearLines(); }, [board, clearLines]);
-
+  
   useEffect(() => {
     if (!isPlaying || isGameOver || isPaused) return;
     const interval = setInterval(drop, dropInterval);
@@ -459,7 +612,7 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text min-h-screen font-sans flex flex-col transition-colors duration-300">
-      <main className="flex-grow flex flex-col md:flex-row items-center justify-center p-4 gap-4 md:gap-8 relative">
+      <main className="flex-grow flex flex-col md:flex-row items-center md:items-start justify-center p-2 sm:p-4 gap-4 md:gap-8 relative">
         {showInstructions && <InstructionsModal onClose={() => setShowInstructions(false)} />}
         {(!isPlaying || isGameOver) && renderStartScreen()}
         {isPaused && (
@@ -469,8 +622,23 @@ const App: React.FC = () => {
                 <button onClick={() => setIsPaused(false)} className="px-8 py-4 bg-yellow-500 hover:bg-yellow-600 text-slate-900 font-bold rounded-lg text-2xl shadow-lg transform hover:scale-105 transition-transform">Resume</button>
             </div>
         )}
-        <div className="w-full max-w-sm md:w-96"><GameBoard board={board} currentPiece={currentPiece} /></div>
-        <div className="flex flex-col gap-4 text-center w-full max-w-sm md:w-80">
+        
+        <div className="flex flex-col items-center">
+            {isMobile && <MobileInfoBar score={score} highScore={highScore} level={level} nextPiece={nextPiece} />}
+            <div className="w-full max-w-xs sm:max-w-sm md:w-96 relative">
+              <GameBoard board={board} currentPiece={currentPiece} />
+              {comboMessage && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                  <p className="text-5xl font-bold text-fries animate-pulse" style={{ textShadow: '3px 3px 0 #1A202C, -1px -1px 0 #1A202C, 1px -1px 0 #1A202C, -1px 1px 0 #1A202C, 1px 1px 0 #1A202C' }}>
+                    {comboMessage}
+                  </p>
+                </div>
+              )}
+            </div>
+            {isMobile && <DpadControls onMove={playerMove} onRotate={playerRotate} onDrop={drop} onHardDrop={hardDrop} />}
+        </div>
+        
+        <div className="hidden md:flex flex-col gap-4 text-center w-full max-w-sm md:w-80">
           <div className="bg-slate-200 dark:bg-slate-800 p-4 rounded-lg shadow-md">
             <h2 className="font-bold text-lg mb-1">SCORE</h2><p className="text-2xl text-fries">{score}</p>
           </div>
@@ -481,9 +649,12 @@ const App: React.FC = () => {
             <h2 className="font-bold text-lg mb-1">NEXT</h2>
             <div className="w-24 h-24 mx-auto mt-2"><NextPiece piece={nextPiece} /></div>
           </div>
-          <div className="flex justify-between bg-slate-200 dark:bg-slate-800 p-4 rounded-lg shadow-md">
-            <div><h2 className="font-bold text-lg">LEVEL</h2><p className="text-xl">{level}</p></div>
-            <div><h2 className="font-bold text-lg">TIMER</h2><p className="text-xl">{time}</p></div>
+          <div className="flex flex-col gap-2 bg-slate-200 dark:bg-slate-800 p-4 rounded-lg shadow-md">
+            <div className="flex justify-between">
+              <div><h2 className="font-bold text-lg">LEVEL</h2><p className="text-xl">{level}</p></div>
+              <div><h2 className="font-bold text-lg">TIMER</h2><p className="text-xl">{time}</p></div>
+            </div>
+            <LevelProgress progress={levelProgress} />
           </div>
           <ControlsDisplay />
            <div className="flex gap-2">
